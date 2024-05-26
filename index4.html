@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Slip Generator</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <style>
+        @media print {
+            body {
+                margin: 0;
+                padding: 0;
+                font-size: 12px;
+            }
+            .container {
+                width: 21cm;
+                margin: auto;
+            }
+            .card {
+                margin-bottom: 10px;
+                page-break-inside: avoid;
+            }
+            .form-group,
+            .print-button,.drop-zone {
+                display: none !important;
+            }
+        }
+        .file-upload {
+            margin-top: 20px;
+            text-align: center;
+        }
+        .file-upload label {
+            display: inline-block;
+            cursor: pointer;
+            background: linear-gradient(135deg, #6e8efb, #a777e3);
+            color: white;
+            font-size: 18px;
+            padding: 15px 30px;
+            border-radius: 50px;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        .file-upload label:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        }
+        .file-upload label:active {
+            transform: scale(0.95);
+        }
+        .file-upload input[type="file"] {
+            display: none;
+        }
+        .drop-zone {
+            margin-top: 20px;
+            border: 2px dashed #6e8efb;
+            border-radius: 10px;
+            padding: 50px;
+            text-align: center;
+            color: #6e8efb;
+            font-size: 18px;
+            transition: background-color 0.3s, border-color 0.3s;
+        }
+        .drop-zone.dragover {
+            background-color: #f0f0ff;
+            border-color: #a777e3;
+        }
+        .print-button {
+            margin-top: 20px;
+            text-align: center;
+        }
+        .print-button button {
+            font-size: 18px;
+            padding: 11px 40px;
+            background-image: linear-gradient(to right, #f6d365 0%, #fda085 51%, #f6d365 100%);
+            border: none;
+            color: white;
+            border-radius: 50px;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        .print-button button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+            background-position: right center;
+        }
+        .print-button button:active {
+            transform: scale(0.95);
+        }
+        .error-message {
+            margin-top: 10px;
+            text-align: center;
+            color: white;
+            background-color: #ff4d4d;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+
+            border-radius: 10px;
+            padding: 15px;
+            position: relative;
+            display: none;
+        }
+        .error-symbol {
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 24px;
+            color: white;
+        }
+        .close-btn {
+            position: absolute;
+            top: 5px;
+            right: 10px;
+            padding: 5px;
+            cursor: pointer;
+            color: white;
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-5">
+        <div class="drop-zone" id="dropZone">
+            <p>Or drag and drop your Excel file here</p>
+            <div class="file-upload">
+                <label for="excelFile" id="fileLabel">Choose Excel File</label>
+                <input type="file" class="form-control-file" id="excelFile" accept=".xlsx, .xls" onchange="handleFile(event)">
+            </div>
+        </div>
+        <div class="error-message" id="errorMessage">
+            <span class="error-symbol">&#9888;</span>
+            <span id="errorMessageText"></span>
+            <span class="close-btn" onclick="closeErrorMessage()">&times;</span>
+        </div>
+        <div class="print-button fw-bold">
+            <button class="btn btn-success btn-lg" onclick="printSlips()" disabled>Print</button>
+        </div>
+        <div id="slips" class="mt-5"></div>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.16.9/xlsx.full.min.js"></script>
+    <script>
+         const dropZone = document.getElementById('dropZone');
+        const errorMessage = document.getElementById('errorMessage');
+        const errorMessageText = document.getElementById('errorMessageText');
+        const printButton = document.querySelector('.print-button button');
+        const fileLabel = document.getElementById('fileLabel');
+
+        document.getElementById('excelFile').addEventListener('change', handleFile, false);
+
+        dropZone.addEventListener('dragover', (event) => {
+            event.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+
+        dropZone.addEventListener('drop', (event) => {
+            event.preventDefault();
+            dropZone.classList.remove('dragover');
+            const files = event.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile({ target: { files: files } });
+            }
+        });
+
+        function displayFileName(filename) {
+            if (!errorMessage.style.display || errorMessage.style.display === 'none') {
+                fileLabel.innerText = filename || 'Choose Excel File';
+            }
+        }
+
+        function handleFile(event) {
+            const file = event.target.files[0];
+            if (file) {
+                if (file.type !== 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' &&
+                    file.type !== 'application/vnd.ms-excel') {
+                    displayErrorMessage('Please upload only Excel files.');
+                    printButton.disabled = true;
+                    displayFileName();
+                    return;
+                }
+                errorMessage.style.display = 'none';
+                displayFileName(file.name);
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const sheetName = workbook.SheetNames[0];
+                    const sheet = workbook.Sheets[sheetName];
+                    const jsonData = XLSX.utils.sheet_to_json(sheet);
+                    generateSlips(normalizeData(jsonData));
+                };
+                reader.readAsArrayBuffer(file);
+                printButton.disabled = false; // Enable the print button
+            } else {
+                printButton.disabled = true; // Disable the print button if no file is selected
+            }
+        }
+
+        function displayErrorMessage(message) {
+            errorMessageText.innerText = message;
+            errorMessage.style.display = 'block';
+        }
+
+        function closeErrorMessage() {
+            errorMessage.style.display = 'none';
+        }
+
+        function normalizeData(data) {
+            return data.map(row => {
+                const normalizedRow = {};
+                Object.keys(row).forEach(key => {
+                    // Standardize column names: remove spaces and convert to uppercase
+                    const standardizedKey = key.trim().toUpperCase().replace(/\s+/g, '');
+                    const trimmedValue = (typeof row[key] === 'string') ? row[key].trim() : row[key];
+                    normalizedRow[standardizedKey] = trimmedValue;
+                });
+                return {
+                    'DATE': normalizedRow['DATE'] || 'N/A',
+                    'BARCODNO': normalizedRow['BARCODNO'] || 'N/A',
+                    'FILENAME': normalizedRow['FILENAME'] || 'N/A',
+                    'OPERATORNAME': normalizedRow['OPERATORNAME'] || 'N/A'
+                };
+            });
+        }
+
+
+        function generateSlips(data) {
+            const container = document.getElementById('slips');
+            container.innerHTML = ''; // Clear previous slips if any
+
+            data.forEach(row => {
+                const slip = document.createElement('div');
+                slip.className = 'card mb-3';
+                slip.innerHTML = `
+                    <div class="card-body">
+                        <h5 class="card-title text-center">Mumbai Housing And Area Development Authority</h5>
+                        <p class="card-text"><strong>File No.MSIB / EE / City / AG No / B-1 / DATE:</strong> ${row['DATE']} / </p>
+                        <p class="card-text"><strong>BARCOD NO:</strong> ${row['BARCODNO']}</p>
+                        <p class="card-text"><strong>FILE NAME:</strong> ${row['FILENAME']}</p>
+                        <p class="card-text"><strong>OPERATOR NAME:</strong> ${row['OPERATORNAME']}</p>
+                    </div>
+                `;
+                container.appendChild(slip);
+            });
+        }
+
+        function printSlips() {
+            window.print();
+        }
+    </script>
+</body>
+</html>
