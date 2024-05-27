@@ -113,6 +113,8 @@
             color: white;
             font-size: 18px;
         }
+        .card-border{
+            border:2px solid black;
     </style>
 </head>
 <body>
@@ -230,7 +232,7 @@
 
             data.forEach(row => {
                 const slip = document.createElement('div');
-                slip.className = 'card mb-3';
+                slip.className = 'card mb-3 card-border';
                 slip.innerHTML = `
                     <div class="card-body">
                         <h5 class="card-title text-center">Mumbai Housing And Area Development Authority</h5>
